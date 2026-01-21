@@ -1,0 +1,236 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>PINEX MINI | AI MOD</title>
+    <style>
+        /* BASIC DARK THEME */
+        * { -webkit-tap-highlight-color: transparent; user-select: none; outline: none; box-sizing: border-box; }
+        body, html { margin: 0; padding: 0; height: 100%; width: 100%; overflow: hidden; background: #000; font-family: 'Courier New', monospace; }
+        
+        #game-frame { position: absolute; top: 0; left: 0; width: 100%; height: 100%; border: none; z-index: 1; }
+        .draggable { position: absolute; z-index: 10000; touch-action: none; cursor: move; }
+
+        /* SKULL BUTTON */
+        #main-skull {
+            top: 100px; left: 10px; width: 45px; height: 45px;
+            background: rgba(0,0,0,0.8); border: 2px solid #0f0; border-radius: 50%;
+            display: flex; justify-content: center; align-items: center;
+            box-shadow: 0 0 10px #0f0; cursor: pointer; animation: pulse 2s infinite; font-size: 20px;
+        }
+        @keyframes pulse { 0% { box-shadow: 0 0 5px #0f0; } 50% { box-shadow: 0 0 15px #0f0; } 100% { box-shadow: 0 0 5px #0f0; } }
+
+        /* MINI SIGNAL WIDGET (SMALLER SIZE) */
+        #signal-widget {
+            top: 150px; right: 10px; 
+            width: 190px; height: 280px; /* সাইজ ছোট করা হয়েছে */
+            background: rgba(0, 10, 0, 0.95); border: 1px solid #00ffff;
+            border-radius: 10px; padding: 0; text-align: center;
+            box-shadow: 0 0 15px rgba(0, 255, 255, 0.2); color: white;
+            position: absolute; overflow: hidden; backdrop-filter: blur(4px);
+            display: block;
+        }
+        
+        .header { padding: 5px; background: rgba(0, 255, 255, 0.15); border-bottom: 1px solid #00ffff; font-size: 11px; font-weight: bold; color: #00ffff; letter-spacing: 1px; }
+
+        /* SCAN STATUS */
+        .scan-box {
+            position: absolute; top: 25px; right: 5px; 
+            padding: 1px 4px; border: 1px solid #ff00de; 
+            font-size: 8px; color: #ff00de; background: #000; border-radius: 2px;
+        }
+        
+        .pred-area { height: 80px; display: flex; flex-direction: column; justify-content: center; align-items: center; position: relative; margin-top: 5px; }
+        .big-txt { font-size: 40px; font-weight: 900; color: #ffff00; text-shadow: 0 0 10px #ffff00; }
+        .small-txt { font-size: 40px; font-weight: 900; color: #00ffff; text-shadow: 0 0 10px #00ffff; }
+        .skip-txt { font-size: 30px; font-weight: bold; color: #ff0000; animation: blink 0.5s infinite; }
+        
+        .wait-txt { font-size: 14px; color: #aaa; font-weight: bold; animation: blink 1s infinite; }
+
+        /* WIN/LOSS STREAK DISPLAY */
+        .streak-area {
+            font-size: 12px; font-weight: bold; margin: 2px 0; padding: 3px;
+            border-top: 1px solid #333; border-bottom: 1px solid #333;
+        }
+        .win-streak { color: #0f0; }
+        .loss-streak { color: #f00; }
+
+        .info-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 3px; padding: 5px; }
+        .info-box { background: #111; padding: 3px; border: 1px solid #333; border-radius: 3px; }
+        .lbl { font-size: 8px; color: #888; display: block; }
+        .val { font-size: 10px; font-weight: bold; color: #fff; }
+
+        @keyframes blink { 50% { opacity: 0.5; } }
+        
+        /* TOAST */
+        #toast { position: absolute; bottom: 50px; left: 50%; transform: translateX(-50%); background: rgba(0,0,0,0.8); color: #fff; padding: 5px 10px; border-radius: 10px; font-size: 10px; display: none; z-index: 20000; border: 1px solid #fff; white-space: nowrap; }
+    </style>
+</head>
+<body>
+
+    <iframe src="https://tkclub2.com" id="game-frame"></iframe>
+
+    <div id="main-skull" class="draggable" onclick="toggleUI()">💀</div>
+
+    <div id="signal-widget" class="draggable">
+        <div class="header">PINEX AI SCANNER</div>
+        <div id="pattern-trace" class="scan-box">SCAN...</div>
+
+        <div class="pred-area">
+            <div id="result-display" class="wait-txt">WAIT...</div>
+        </div>
+
+        <div class="streak-area">
+            <span id="streak-val" style="color:#888">READY</span>
+        </div>
+
+        <div class="info-grid">
+            <div class="info-box">
+                <span class="lbl">PERIOD</span>
+                <span class="val" id="period-val">---</span>
+            </div>
+            <div class="info-box">
+                <span class="lbl">MATCHES</span>
+                <span class="val" id="match-val" style="color:#ff00de">0</span>
+            </div>
+            <div class="info-box">
+                <span class="lbl">CONFIDENCE</span>
+                <span class="val" id="conf-val">0%</span>
+            </div>
+            <div class="info-box">
+                <span class="lbl">LAST</span>
+                <span class="val" id="last-res">---</span>
+            </div>
+        </div>
+        <div style="font-size: 8px; color: #555; margin-top: 5px;">DB: <span style="color:#0f0">LIVE</span></div>
+    </div>
+
+    <div id="toast">Connecting...</div>
+
+    <script>
+        // CONFIG - NEW URL
+        const DB_URL = "https://hidndnd-default-rtdb.firebaseio.com/wingo_records.json";
+        
+        let lastPeriod = null;
+        let prediction = null;
+        let streak = 0; 
+
+        async function mainLoop() {
+            try {
+                let res = await fetch(DB_URL);
+                let data = await res.json();
+                if (!data) return;
+
+                let keys = Object.keys(data).sort();
+                let latestKey = keys[keys.length - 1];
+                let latestData = data[latestKey];
+                let currentPeriod = latestData.period;
+
+                if (currentPeriod !== lastPeriod) {
+                    
+                    // CHECK WIN/LOSS
+                    if (lastPeriod && prediction && prediction !== "SKIP") {
+                        let actual = latestData.size;
+                        if (actual === prediction) {
+                            streak = (streak < 0) ? 1 : streak + 1;
+                            showToast(`WIN! ${actual}`);
+                        } else {
+                            streak = (streak > 0) ? -1 : streak - 1;
+                            showToast(`LOSS! ${actual}`);
+                        }
+                        updateStreak();
+                    }
+
+                    lastPeriod = currentPeriod;
+                    // FULL PERIOD NUMBER (NO SLICE)
+                    let nextPeriod = (BigInt(currentPeriod) + 1n).toString();
+                    document.getElementById('period-val').innerText = nextPeriod;
+                    document.getElementById('last-res').innerText = latestData.size;
+
+                    // ANIMATION
+                    document.getElementById('result-display').className = "wait-txt";
+                    document.getElementById('result-display').innerText = "SCANNING...";
+                    
+                    await new Promise(r => setTimeout(r, 2000));
+
+                    // 6 PATTERN CHECK LOGIC
+                    let analysis = analyzePattern(data, keys);
+                    prediction = analysis.pred;
+                    
+                    displayPrediction(prediction, analysis);
+                }
+            } catch (e) { console.log(e); }
+        }
+
+        function analyzePattern(data, keys) {
+            let history = keys.map(k => data[k].size);
+            // 6 PATTERN LENGTH
+            let pLen = 6;
+            if (history.length < 20) return { pred: "SKIP", matches: 0, conf: 0 };
+
+            let currentPattern = history.slice(-pLen);
+            document.getElementById('pattern-trace').innerText = `PAT: ${currentPattern.map(s=>s[0]).join("")}`;
+
+            let bCount = 0; let sCount = 0; let matches = 0;
+
+            for (let i = 0; i < history.length - pLen - 1; i++) {
+                let slice = history.slice(i, i + pLen);
+                if (JSON.stringify(slice) === JSON.stringify(currentPattern)) {
+                    matches++;
+                    let nextVal = history[i + pLen];
+                    if (nextVal === "BIG") bCount++;
+                    else if (nextVal === "SMALL") sCount++;
+                }
+            }
+
+            // SKIP IF NO MATCH
+            if (matches === 0) {
+                return { pred: "SKIP", matches: 0, conf: 0 };
+            }
+
+            let pred = (bCount >= sCount) ? "BIG" : "SMALL";
+            let conf = Math.round((Math.max(bCount, sCount) / matches) * 100);
+            return { pred, matches, conf };
+        }
+
+        function updateStreak() {
+            let el = document.getElementById('streak-val');
+            if (streak > 0) { el.innerText = `WIN x${streak}`; el.className = "win-streak"; }
+            else if (streak < 0) { el.innerText = `LOSS ${streak}`; el.className = "loss-streak"; }
+            else { el.innerText = "READY"; el.className = ""; }
+        }
+
+        function displayPrediction(pred, analysis) {
+            let resEl = document.getElementById('result-display');
+            if (pred === "BIG") { resEl.innerText = "BIG"; resEl.className = "big-txt"; }
+            else if (pred === "SMALL") { resEl.innerText = "SMALL"; resEl.className = "small-txt"; }
+            else { resEl.innerText = "SKIP"; resEl.className = "skip-txt"; }
+            document.getElementById('match-val').innerText = analysis.matches;
+            document.getElementById('conf-val').innerText = analysis.conf + "%";
+        }
+
+        function showToast(msg) {
+            let t = document.getElementById('toast');
+            t.innerText = msg; t.style.display = 'block';
+            setTimeout(() => t.style.display = 'none', 3000);
+        }
+        function toggleUI() {
+            let w = document.getElementById('signal-widget');
+            w.style.display = (w.style.display === 'none') ? 'block' : 'none';
+        }
+        
+        // DRAG
+        document.querySelectorAll('.draggable').forEach(el => {
+            let isDown=false, offX, offY;
+            el.addEventListener('mousedown', e => { isDown=true; offX=e.clientX-el.offsetLeft; offY=e.clientY-el.offsetTop; });
+            document.addEventListener('mousemove', e => { if(isDown) { el.style.left=(e.clientX-offX)+'px'; el.style.top=(e.clientY-offY)+'px'; }});
+            document.addEventListener('mouseup', () => isDown=false);
+            el.addEventListener('touchstart', e => { offX=e.touches[0].clientX-el.offsetLeft; offY=e.touches[0].clientY-el.offsetTop; }, {passive:true});
+            el.addEventListener('touchmove', e => { e.preventDefault(); el.style.left=(e.touches[0].clientX-offX)+'px'; el.style.top=(e.touches[0].clientY-offY)+'px'; }, {passive:true});
+        });
+
+        setInterval(mainLoop, 3000);
+    </script>
+</body>
+</html>
